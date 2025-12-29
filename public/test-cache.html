@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phase 8.1 推理缓存测试</title>
+    <style>
+        body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: #0d1117;
+            color: #f0f6fc;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #1f6feb, #238636);
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .test-section {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .test-section h3 {
+            color: #58a6ff;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #8b949e;
+        }
+        .status-indicator.running { background: #d29922; }
+        .status-indicator.success { background: #238636; }
+        .status-indicator.error { background: #da3633; }
+        button {
+            background: #1f6feb;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+            transition: background 0.2s;
+        }
+        button:hover { background: #388bfd; }
+        button:disabled {
+            background: #30363d;
+            cursor: not-allowed;
+        }
+        .results {
+            background: #0d1117;
+            border: 1px solid #21262d;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .metric {
+            display: inline-block;
+            background: #30363d;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin: 2px;
+            font-size: 11px;
+        }
+        .metric.hit-rate { background: #238636; color: white; }
+        .metric.response-time { background: #1f6feb; color: white; }
+        .performance-chart {
+            display: flex;
+            align-items: end;
+            height: 150px;
+            margin: 20px 0;
+            padding: 20px;
+            background: #161b22;
+            border-radius: 8px;
+        }
+        .chart-bar {
+            flex: 1;
+            background: #30363d;
+            margin: 0 2px;
+            border-radius: 4px 4px 0 0;
+            position: relative;
+            display: flex;
+            align-items: end;
+            justify-content: center;
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        .chart-bar.cached { background: #238636; }
+        .chart-bar.uncached { background: #da3633; }
+        .chart-label {
+            position: absolute;
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 9px;
+            color: #8b949e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Phase 8.1 推理缓存测试</h1>
+            <p>测试缓存键生成、存储检索和性能提升效果</p>
+        </div>
+
+        <div class="test-section">
+            <h3>
+                <span class="status-indicator" id="cache-test-status"></span>
+                缓存基础功能测试
+            </h3>
+            <p>测试缓存键生成、存储和检索功能</p>
+            <button onclick="runCacheBasicTest()">运行基础测试</button>
+            <button onclick="clearCache()">清空缓存</button>
+            <div class="results" id="cache-basic-results">等待测试...</div>
+        </div>
+
+        <div class="test-section">
+            <h3>
+                <span class="status-indicator" id="performance-test-status"></span>
+                性能对比测试
+            </h3>
+            <p>对比有缓存和无缓存的响应时间</p>
+            <button onclick="runPerformanceTest()">运行性能测试</button>
+            <div class="results" id="performance-results">等待测试...</div>
+            <div class="performance-chart" id="performance-chart">
+                <div class="chart-bar uncached" style="height: 100%">
+                    <span>无缓存</span>
+                    <div class="chart-label">基准</div>
+                </div>
+                <div class="chart-bar cached" style="height: 20%">
+                    <span>有缓存</span>
+                    <div class="chart-label">优化后</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>
+                <span class="status-indicator" id="similarity-test-status"></span>
+                相似度匹配测试
+            </h3>
+            <p>测试相似查询的缓存命中能力</p>
+            <button onclick="runSimilarityTest()">运行相似度测试</button>
+            <div class="results" id="similarity-results">等待测试...</div>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 缓存统计信息</h3>
+            <button onclick="showCacheStats()">查看统计</button>
+            <div class="results" id="cache-stats">等待统计...</div>
+        </div>
+    </div>
+
+    <script type="module">
+        // 导入缓存相关模块
+        import { ReasoningCache } from './lib/core/reasoningCache.js';
+        import { CacheKeyGenerator } from './lib/core/cacheKey.js';
+
+        // 全局变量
+        let cache = null;
+        let keyGenerator = null;
+
+        // 初始化
+        function initCache() {
+            if (!cache) {
+                cache = new ReasoningCache({
+                    maxSize: 50 * 1024 * 1024, // 50MB
+                    defaultTtl: 10 * 60 * 1000, // 10分钟（测试用短时间）
+                });
+                keyGenerator = new CacheKeyGenerator();
+                console.log('✅ 缓存系统初始化完成');
+            }
+        }
+
+        // 设置状态指示器
+        function setStatus(elementId, status) {
+            const element = document.getElementById(elementId);
+            element.className = 'status-indicator ' + status;
+        }
+
+        // 基础功能测试
+        window.runCacheBasicTest = async function() {
+            try {
+                setStatus('cache-test-status', 'running');
+                initCache();
+
+                const results = document.getElementById('cache-basic-results');
+                results.textContent = '🔄 开始缓存基础测试...\n\n';
+
+                // 测试数据
+                const testIntent = '查询天气信息';
+                const testToolCalls = [{
+                    name: 'get_weather',
+                    args: { city: '北京', date: '今天' }
+                }];
+                const testContext = {
+                    timestamp: Date.now(),
+                    userId: 'test_user',
+                    sessionId: 'test_session',
+                    location: '北京',
+                    environment: 'web'
+                };
+
+                results.textContent += '📝 生成缓存键...\n';
+                const cacheKey = keyGenerator.generateKey(testIntent, testToolCalls, testContext);
+                results.textContent += `✅ 缓存键ID: ${cacheKey.id}\n`;
+                results.textContent += `✅ 意图: ${cacheKey.intent}\n`;
+                results.textContent += `✅ 工具签名: ${cacheKey.toolSignature}\n\n`;
+
+                // 存储测试
+                results.textContent += '💾 存储测试结果...\n';
+                const mockResult = {
+                    success: true,
+                    data: { temperature: 25, weather: '晴天', humidity: 60 },
+                    timestamp: Date.now()
+                };
+
+                await cache.store(testIntent, testToolCalls, testContext, mockResult);
+                results.textContent += '✅ 存储成功\n\n';
+
+                // 检索测试
+                results.textContent += '🔍 检索测试...\n';
+                const retrieved = await cache.retrieve(testIntent, testToolCalls, testContext);
+
+                if (retrieved) {
+                    results.textContent += '✅ 检索成功 (缓存命中)\n';
+                    results.textContent += `📊 结果: ${JSON.stringify(retrieved.data, null, 2)}\n`;
+                    results.textContent += `⚡ 响应时间: ${Date.now() - retrieved.metadata.cachedAt}ms\n`;
+                    results.textContent += `🎯 置信度: ${(retrieved.metadata.confidence * 100).toFixed(1)}%\n`;
+                } else {
+                    results.textContent += '❌ 检索失败\n';
+                }
+
+                results.textContent += '\n🎉 基础测试完成！';
+                setStatus('cache-test-status', 'success');
+
+            } catch (error) {
+                console.error('基础测试失败:', error);
+                document.getElementById('cache-basic-results').textContent += `\n❌ 测试失败: ${error.message}`;
+                setStatus('cache-test-status', 'error');
+            }
+        };
+
+        // 性能测试
+        window.runPerformanceTest = async function() {
+            try {
+                setStatus('performance-test-status', 'running');
+                initCache();
+
+                const results = document.getElementById('performance-results');
+                results.textContent = '🔄 开始性能对比测试...\n\n';
+
+                // 测试数据
+                const testIntent = '数学计算';
+                const testToolCalls = [{ name: 'calculator', args: { expression: '123 * 456' } }];
+                const testContext = {
+                    timestamp: Date.now(),
+                    userId: 'perf_test',
+                    sessionId: 'perf_session'
+                };
+
+                // 模拟工具执行结果
+                const mockResult = {
+                    result: 123 * 456,
+                    expression: '123 * 456',
+                    timestamp: Date.now()
+                };
+
+                // 首次执行（无缓存）
+                results.textContent += '🚀 首次执行 (无缓存)...\n';
+                const startTime1 = performance.now();
+
+                // 模拟推理延迟
+                await new Promise(resolve => setTimeout(resolve, 50));
+
+                const endTime1 = performance.now();
+                const time1 = endTime1 - startTime1;
+
+                results.textContent += `⏱️ 耗时: ${time1.toFixed(2)}ms\n\n`;
+
+                // 存储到缓存
+                await cache.store(testIntent, testToolCalls, testContext, mockResult);
+                results.textContent += '💾 结果已缓存\n\n';
+
+                // 第二次执行（有缓存）
+                results.textContent += '⚡ 第二次执行 (有缓存)...\n';
+                const startTime2 = performance.now();
+
+                const cachedResult = await cache.retrieve(testIntent, testToolCalls, testContext);
+
+                const endTime2 = performance.now();
+                const time2 = endTime2 - startTime2;
+
+                if (cachedResult) {
+                    results.textContent += `✅ 缓存命中!\n`;
+                    results.textContent += `⏱️ 耗时: ${time2.toFixed(2)}ms\n`;
+                    results.textContent += `📊 结果: ${cachedResult.data.result}\n`;
+
+                    const speedup = ((time1 - time2) / time1 * 100).toFixed(1);
+                    results.textContent += `🚀 提速: ${speedup}%\n`;
+
+                    // 更新图表
+                    updatePerformanceChart(time1, time2);
+                }
+
+                results.textContent += '\n🎉 性能测试完成！';
+                setStatus('performance-test-status', 'success');
+
+            } catch (error) {
+                console.error('性能测试失败:', error);
+                document.getElementById('performance-results').textContent += `\n❌ 测试失败: ${error.message}`;
+                setStatus('performance-test-status', 'error');
+            }
+        };
+
+        // 更新性能图表
+        function updatePerformanceChart(time1, time2) {
+            const chart = document.getElementById('performance-chart');
+            const bars = chart.querySelectorAll('.chart-bar');
+
+            // 基准高度
+            const maxHeight = 120;
+            const height1 = Math.min(maxHeight, (time1 / 10)); // 每10ms对应1px
+            const height2 = Math.min(maxHeight, (time2 / 10));
+
+            bars[0].style.height = height1 + 'px';
+            bars[0].querySelector('span').textContent = time1.toFixed(0) + 'ms';
+
+            bars[1].style.height = height2 + 'px';
+            bars[1].querySelector('span').textContent = time2.toFixed(0) + 'ms';
+        }
+
+        // 相似度测试
+        window.runSimilarityTest = async function() {
+            try {
+                setStatus('similarity-test-status', 'running');
+                initCache();
+
+                const results = document.getElementById('similarity-results');
+                results.textContent = '🔄 开始相似度匹配测试...\n\n';
+
+                // 存储几个不同的查询
+                const queries = [
+                    { intent: '查询北京天气', tool: 'get_weather', city: '北京' },
+                    { intent: '查看上海天气情况', tool: 'get_weather', city: '上海' },
+                    { intent: '广州天气怎么样', tool: 'get_weather', city: '广州' },
+                    { intent: '计算数学题', tool: 'calculator', expr: '2+3' },
+                ];
+
+                results.textContent += '📝 存储测试数据...\n';
+                for (const query of queries) {
+                    const toolCalls = query.tool === 'get_weather' ?
+                        [{ name: 'get_weather', args: { city: query.city } }] :
+                        [{ name: 'calculator', args: { expression: query.expr } }];
+
+                    const context = {
+                        timestamp: Date.now(),
+                        userId: 'similarity_test',
+                        sessionId: 'similarity_session'
+                    };
+
+                    const result = query.tool === 'get_weather' ?
+                        { weather: '晴天', temp: 25 } :
+                        { result: eval(query.expr) };
+
+                    await cache.store(query.intent, toolCalls, context, result);
+                }
+                results.textContent += '✅ 测试数据存储完成\n\n';
+
+                // 测试相似查询
+                results.textContent += '🔍 测试相似查询...\n';
+                const similarResults = await cache.findSimilar('天气', 5);
+
+                results.textContent += `📊 找到 ${similarResults.length} 个相似结果:\n`;
+                similarResults.forEach((result, index) => {
+                    results.textContent += `${index + 1}. ${result.cacheKey.intent}\n`;
+                    results.textContent += `   工具: ${result.cacheKey.toolSignature}\n`;
+                    results.textContent += `   结果: ${JSON.stringify(result.result)}\n\n`;
+                });
+
+                // 测试精确匹配
+                const exactQuery = {
+                    intent: '查询北京天气',
+                    toolCalls: [{ name: 'get_weather', args: { city: '北京' } }],
+                    context: {
+                        timestamp: Date.now(),
+                        userId: 'similarity_test',
+                        sessionId: 'similarity_session'
+                    }
+                };
+
+                const exactResult = await cache.retrieve(exactQuery.intent, exactQuery.toolCalls, exactQuery.context);
+                if (exactResult) {
+                    results.textContent += '🎯 精确匹配测试: 成功\n';
+                    results.textContent += `   结果: ${JSON.stringify(exactResult.data)}\n`;
+                }
+
+                results.textContent += '\n🎉 相似度测试完成！';
+                setStatus('similarity-test-status', 'success');
+
+            } catch (error) {
+                console.error('相似度测试失败:', error);
+                document.getElementById('similarity-results').textContent += `\n❌ 测试失败: ${error.message}`;
+                setStatus('similarity-test-status', 'error');
+            }
+        };
+
+        // 显示缓存统计
+        window.showCacheStats = async function() {
+            try {
+                if (!cache) initCache();
+
+                const stats = await cache.getStats();
+                const statsDiv = document.getElementById('cache-stats');
+
+                statsDiv.innerHTML = `
+📊 缓存统计信息
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+总条目数: ${stats.totalEntries}
+总大小: ${(stats.totalSize / 1024).toFixed(2)} KB
+命中率: ${stats.hitRate ? (stats.hitRate * 100).toFixed(1) : 'N/A'}%
+平均响应时间: ${stats.averageAccessTime ? stats.averageAccessTime.toFixed(2) : 'N/A'}ms
+最早条目: ${new Date(stats.oldestEntry).toLocaleString()}
+最新条目: ${new Date(stats.newestEntry).toLocaleString()}
+运行时间: ${Math.floor(stats.uptime / 1000 / 60)} 分 ${Math.floor((stats.uptime / 1000) % 60)} 秒
+
+📋 配置信息
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+最大缓存大小: ${(stats.config.maxSize / 1024 / 1024).toFixed(1)} MB
+默认TTL: ${stats.config.defaultTtl / 1000 / 60} 分钟
+清理间隔: ${stats.config.cleanupInterval / 1000 / 60} 分钟
+启用压缩: ${stats.config.enableCompression ? '是' : '否'}
+                `;
+
+            } catch (error) {
+                console.error('获取统计失败:', error);
+                document.getElementById('cache-stats').textContent = `❌ 获取统计失败: ${error.message}`;
+            }
+        };
+
+        // 清空缓存
+        window.clearCache = async function() {
+            try {
+                if (!cache) initCache();
+
+                await cache.clear();
+                document.getElementById('cache-basic-results').textContent = '🗑️ 缓存已清空';
+                document.getElementById('cache-stats').textContent = '等待统计...';
+
+                // 重置图表
+                const bars = document.querySelectorAll('.chart-bar');
+                bars[0].style.height = '100px';
+                bars[0].querySelector('span').textContent = '无缓存';
+                bars[1].style.height = '20px';
+                bars[1].querySelector('span').textContent = '有缓存';
+
+                console.log('缓存已清空');
+
+            } catch (error) {
+                console.error('清空缓存失败:', error);
+                alert(`清空缓存失败: ${error.message}`);
+            }
+        };
+
+        // 页面加载完成初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Phase 8.1 缓存测试页面已加载');
+        });
+    </script>
+</body>
+</html>
