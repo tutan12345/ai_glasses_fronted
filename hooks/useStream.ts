@@ -25,7 +25,11 @@ export function useStream() {
     let streamConsumed = false;
 
     try {
-      const response = await fetch(url, {
+      // 检查是否有配置的后端 API 基础地址
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+      const fullUrl = url.startsWith('http') ? url : `${apiBaseUrl}${url}`;
+
+      const response = await fetch(fullUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

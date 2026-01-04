@@ -2,37 +2,32 @@ import type { DeviceState } from '@/types/device';
 import { AIMode } from './types';
 
 /**
- * 将智能眼镜的设备状态映射到AI模式
+ * 将车辆的设备状态映射到 AI 模式
  */
 export function mapDeviceStateToAIMode(deviceState: DeviceState): AIMode {
-  // 优先级：camera > listening > navigation > warning > idle
+  // 优先级：camera > listening > controlling > processing > warning > idle
 
-  // 摄像头或视频录制激活
-  if (deviceState.camera.active || deviceState.video.active || deviceState.camera.recording || deviceState.video.recording) {
+  if (deviceState.camera.active || deviceState.camera.recording) {
     return 'camera';
   }
 
-  // 语音监听或说话中
   if (deviceState.voice.listening || deviceState.voice.speaking) {
     return 'listening';
   }
 
-  // 导航激活
-  if (deviceState.navigation.active) {
-    return 'navigation';
+  const isAnyDoorOpen = Object.values(deviceState.car.doors).some(open => open);
+  if (isAnyDoorOpen || deviceState.car.trunk || deviceState.car.frunk || deviceState.car.sunroof || deviceState.car.horn || deviceState.car.lights.headlight || deviceState.car.ac.state) {
+    return 'controlling';
   }
 
-  // 音乐播放（处理状态）
   if (deviceState.music.isPlaying) {
     return 'processing';
   }
 
-  // 警告状态：电池电量低或充电中
   if (deviceState.battery.level < 20 || deviceState.battery.charging) {
     return 'warning';
   }
 
-  // 默认空闲状态
   return 'idle';
 }
 
@@ -41,31 +36,18 @@ export function mapDeviceStateToAIMode(deviceState: DeviceState): AIMode {
  */
 export function getActiveComponents(deviceState: DeviceState): Record<string, boolean> {
   return {
-    // 摄像头相关
-    camera: deviceState.camera.active || deviceState.video.active,
-
-    // 麦克风（语音监听）
+    camera: deviceState.camera.active,
     microphone: deviceState.voice.listening,
-
-    // 扬声器（音乐播放或语音输出）
     speaker: deviceState.music.isPlaying || deviceState.voice.speaking,
-
-    // 手电筒
-    flashlight: deviceState.flashlight,
-
-    // 蓝牙
+    car: true,
+    doors: Object.values(deviceState.car.doors).some(open => open),
+    trunk: deviceState.car.trunk,
+    frunk: deviceState.car.frunk,
+    sunroof: deviceState.car.sunroof,
+    horn: deviceState.car.horn,
+    headlight: deviceState.car.lights.headlight,
+    ac: deviceState.car.ac.state,
     bluetooth: deviceState.bluetooth.connected,
-
-    // 电池（低电量或充电时）
     battery: deviceState.battery.charging || deviceState.battery.level < 20,
-
-    // 导航
-    navigation: deviceState.navigation.active,
-
-    // 视频录制
-    video: deviceState.video.recording,
-
-    // 屏幕亮度相关
-    screen: deviceState.screenBrightness > 50
   };
 }

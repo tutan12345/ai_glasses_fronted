@@ -1,9 +1,5 @@
 /**
  * ChatInterface - 主聊天界面组件
- * 左右分栏布局：
- * - 左侧：对话框和执行步骤序列
- * - 右侧：工具执行结果面板
- * 参考: agentos-web/App.tsx，但做得更好
  */
 
 'use client';
@@ -22,30 +18,23 @@ import { useMessageBus } from '@/contexts/MessageBusContext';
 import { MessageBusType, type ToolConfirmationRequest } from '@/lib/confirmation-bus/types';
 import { ConfirmationDialog } from '../confirmation/ConfirmationDialog';
 import { logger } from '@/lib/utils/logger';
+import { motion } from 'framer-motion';
 
 export function ChatInterface() {
   const { messages, steps, executions, todos, traceId, promptId, lastUserMessage, reasoningSteps, safetyStatus, sendMessage, retryLast, clearMessages, isLoading, executionContext } = useAgent();
   const [input, setInput] = useState('');
 
-  // Phase 14: 在有当前执行任务时仍然允许输入（补充对话）
   const isInputDisabled = isLoading && !executionContext?.currentExecution;
 
-  // 生成智能体前缀的辅助函数（支持子智能体扩展）
   const getAgentPrefix = (toolName?: string): string => {
-    // 根据工具名称推断可能的子智能体
     if (toolName) {
-      if (toolName.includes('music') || toolName === 'music_player') {
-        return '[子智能体-音乐助手]';
-      }
-      if (toolName.includes('calculator') || toolName === 'calculator') {
-        return '[子智能体-计算器]';
-      }
-      // 可以继续添加其他工具到子智能体的映射
+      if (toolName.includes('music') || toolName === 'music_player') return '[车载娱乐助手]';
+      if (toolName === 'car_control' || toolName === 'light_control' || toolName === 'ac_control') return '[车辆控制中心]';
+      if (toolName === 'camera') return '[车内监控系统]';
     }
-
-    // 默认返回主智能体
-    return '[主智能体]';
+    return '[智能车机]';
   };
+
   const [deviceState, setDeviceState] = useState<DeviceState>(initialDeviceState);
   const [confirmationDialog, setConfirmationDialog] = useState<{
     visible: boolean;
@@ -56,171 +45,119 @@ export function ChatInterface() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const stepsContainerRef = useRef<HTMLDivElement>(null);
 
-  // 获取MessageBus实例
   const messageBus = useMessageBus();
 
-  // 根据工具执行更新设备状态
   useEffect(() => {
     executions.forEach((execution) => {
       const toolName = execution.toolName.toLowerCase();
       const result = execution.result;
       const args = execution.args || {};
 
-      // 仅在 success 时使用返回的 result；在 executing 时用 args 做乐观更新
       const isSuccess = execution.status === 'success' && result;
       const isExecuting = execution.status === 'executing';
 
       if (!isSuccess && !isExecuting) return;
 
-      const agentPrefix = getAgentPrefix(toolName);
-      logger.ui(`${agentPrefix} Updating device state`, { toolName, result, args, status: execution.status });
-
-      if (toolName === 'music_player') {
-        // 乐观：执行中根据 action 预置播放/暂停/停止
+      if (toolName === 'music' || toolName === 'music_player' || toolName === 'play_music') {
         const action = args.action;
-        const isPlaying = isSuccess
-          ? result.isPlaying
-          : action === 'play'
-            ? true
-            : action === 'pause' || action === 'stop'
-              ? false
-              : undefined;
+        const isPlaying = isSuccess ? result.isPlaying : action === 'play' ? true : action === 'pause' || action === 'stop' ? false : undefined;
         const currentTrack = isSuccess ? result.currentTrack : args.track;
         const volume = isSuccess ? result.volume : args.volume;
 
         if (isPlaying !== undefined || volume !== undefined || currentTrack !== undefined) {
-          // 使用异步更新避免阻塞UI
           setTimeout(() => {
-          setDeviceState((prev) => ({
-            ...prev,
-            music: {
-              isPlaying: isPlaying !== undefined ? isPlaying : prev.music.isPlaying,
-              currentTrack: currentTrack !== undefined ? currentTrack : prev.music.currentTrack,
-              volume: volume !== undefined ? volume : prev.music.volume,
-              progress: prev.music.progress,
-            },
-          }));
+            setDeviceState((prev) => ({
+              ...prev,
+              music: {
+                ...prev.music,
+                isPlaying: isPlaying !== undefined ? isPlaying : prev.music.isPlaying,
+                currentTrack: currentTrack !== undefined ? currentTrack : prev.music.currentTrack,
+                volume: volume !== undefined ? volume : prev.music.volume,
+              },
+            }));
           }, 0);
         }
-      } else if (toolName === 'camera') {
-        const active = isSuccess ? result.active : args.action === 'start_recording' ? true : args.action === 'stop_recording' ? false : undefined;
-        const recording = isSuccess ? result.recording : args.action === 'start_recording' ? true : args.action === 'stop_recording' ? false : undefined;
-        const lastPhoto = isSuccess ? result.lastPhoto : undefined;
-        if (active !== undefined || recording !== undefined || lastPhoto !== undefined) {
-          setDeviceState((prev) => ({
-            ...prev,
-            camera: {
-              active: active !== undefined ? active : prev.camera.active,
-              lastPhoto: lastPhoto !== undefined ? lastPhoto : prev.camera.lastPhoto,
-              recording: recording !== undefined ? recording : prev.camera.recording,
-            },
-          }));
-        }
-      } else if (toolName === 'flashlight') {
-        const state = isSuccess ? result.state : args.state;
-        if (state !== undefined) {
-          setDeviceState((prev) => ({
-            ...prev,
-            flashlight: state,
-          }));
-        }
-      } else if (toolName === 'voice') {
-        const listening = isSuccess ? result.listening : args.listening;
-        const speaking = isSuccess ? result.speaking : args.speaking;
-        const volume = isSuccess ? result.volume : args.volume;
-        if (listening !== undefined || speaking !== undefined || volume !== undefined) {
-          setDeviceState((prev) => ({
-            ...prev,
-            voice: {
-              listening: listening !== undefined ? listening : prev.voice.listening,
-              speaking: speaking !== undefined ? speaking : prev.voice.speaking,
-              volume: volume !== undefined ? volume : prev.voice.volume,
-            },
-          }));
-          console.log('[ChatInterface] Voice state updated:', {
-            listening,
-            speaking,
-            volume,
+      } else if (toolName === 'car_control') {
+        const { action, target, value } = args;
+        setTimeout(() => {
+          setDeviceState((prev) => {
+            const newCar = { ...prev.car };
+            if (action === 'door') {
+              if (target === 'front_left') newCar.doors.frontLeft = value;
+              else if (target === 'front_right') newCar.doors.frontRight = value;
+              else if (target === 'rear_left') newCar.doors.rearLeft = value;
+              else if (target === 'rear_right') newCar.doors.rearRight = value;
+              else if (!target) newCar.doors = { frontLeft: value, frontRight: value, rearLeft: value, rearRight: value };
+            } else if (action === 'trunk') newCar.trunk = value;
+            else if (action === 'frunk') newCar.frunk = value;
+            else if (action === 'sunroof') newCar.sunroof = value;
+            else if (action === 'seat') {
+              if (target === 'driver') newCar.seats.driver = value;
+              else if (target === 'passenger') newCar.seats.passenger = value;
+            } else if (action === 'horn') newCar.horn = value;
+            return { ...prev, car: newCar };
           });
-        }
-      } else if (toolName === 'navigation') {
-        const active = isSuccess ? result.active : args.active;
-        const destination = isSuccess ? result.destination : args.destination;
-        const distance = isSuccess ? result.distance : args.distance;
-        const eta = isSuccess ? result.eta : args.eta;
-        if (active !== undefined || destination !== undefined || distance !== undefined || eta !== undefined) {
-          setDeviceState((prev) => ({
+        }, 0);
+      } else if (toolName === 'light_control') {
+        const { action, state, color } = args;
+        setTimeout(() => {
+          setDeviceState(prev => {
+            const newLights = { ...prev.car.lights };
+            if (action === 'headlight') newLights.headlight = state;
+            else if (action === 'hazard') newLights.hazard = state;
+            else if (action === 'ambient') {
+              newLights.ambient = state;
+              if (color) newLights.ambientColor = color;
+            }
+            return { ...prev, car: { ...prev.car, lights: newLights } };
+          });
+        }, 0);
+      } else if (toolName === 'ac_control') {
+        const { state, temperature, fanSpeed } = args;
+        setTimeout(() => {
+          setDeviceState(prev => ({
             ...prev,
-            navigation: {
-              active: active !== undefined ? active : prev.navigation.active,
-              destination: destination !== undefined ? destination : prev.navigation.destination,
-              distance: distance !== undefined ? distance : prev.navigation.distance,
-              eta: eta !== undefined ? eta : prev.navigation.eta,
-            },
+            car: {
+              ...prev.car,
+              ac: {
+                state: state !== undefined ? state : prev.car.ac.state,
+                temperature: temperature || prev.car.ac.temperature,
+                fanSpeed: fanSpeed || prev.car.ac.fanSpeed,
+              }
+            }
           }));
-        }
+        }, 0);
       }
     });
   }, [executions]);
 
-  // MessageBus 订阅 - 处理工具确认请求
   useEffect(() => {
     const handleToolConfirmationRequest = (message: ToolConfirmationRequest) => {
-          logger.ui('收到工具确认请求', { toolName: message.toolCall.name });
-      setConfirmationDialog({
-        visible: true,
-        toolCall: message.toolCall,
-        correlationId: message.correlationId,
-      });
+      setConfirmationDialog({ visible: true, toolCall: message.toolCall, correlationId: message.correlationId });
     };
-
-    messageBus.subscribe(
-      MessageBusType.TOOL_CONFIRMATION_REQUEST,
-      handleToolConfirmationRequest
-    );
-
-    return () => {
-      messageBus.unsubscribe(
-        MessageBusType.TOOL_CONFIRMATION_REQUEST,
-        handleToolConfirmationRequest
-      );
-    };
+    messageBus.subscribe(MessageBusType.TOOL_CONFIRMATION_REQUEST, handleToolConfirmationRequest);
+    return () => messageBus.unsubscribe(MessageBusType.TOOL_CONFIRMATION_REQUEST, handleToolConfirmationRequest);
   }, [messageBus]);
 
-  // 自动滚动
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    if (stepsContainerRef.current) {
-      stepsContainerRef.current.scrollTop = stepsContainerRef.current.scrollHeight;
-    }
+    if (stepsContainerRef.current) stepsContainerRef.current.scrollTop = stepsContainerRef.current.scrollHeight;
   }, [messages, steps]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
-
     const message = input.trim();
     setInput('');
     await sendMessage(message);
   };
 
-  // 工具确认处理函数
   const handleConfirmTool = async (correlationId: string) => {
-    logger.ui('用户确认工具调用', { correlationId });
-    messageBus.publish({
-      type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-      correlationId,
-      confirmed: true,
-    });
+    messageBus.publish({ type: MessageBusType.TOOL_CONFIRMATION_RESPONSE, correlationId, confirmed: true });
     setConfirmationDialog(null);
   };
 
   const handleCancelTool = async (correlationId: string) => {
-    logger.ui('用户取消工具调用', { correlationId });
-    messageBus.publish({
-      type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-      correlationId,
-      confirmed: false,
-    });
+    messageBus.publish({ type: MessageBusType.TOOL_CONFIRMATION_RESPONSE, correlationId, confirmed: false });
     setConfirmationDialog(null);
   };
 
@@ -233,145 +170,51 @@ export function ChatInterface() {
 
   return (
     <div className="flex h-screen w-full bg-[#0d1117] text-white font-sans overflow-hidden">
-      {/* 左侧面板：对话框和执行步骤 */}
       <div className="w-1/2 flex flex-col border-r border-gray-800 bg-[#0d1117]">
-        {/* 头部 */}
         <div className="h-16 border-b border-gray-800 flex items-center justify-between px-6 bg-[#161b22]">
           <div className="flex items-center gap-2">
-            <div className={`w-3 h-3 rounded-full ${isLoading ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}></div>
-            <h1 className="font-bold text-lg tracking-tight text-gray-200">
-              个人助理
-            </h1>
+            <div className={`w-3 h-3 rounded-full ${isLoading ? 'bg-blue-500 animate-pulse' : 'bg-gray-500'}`}></div>
+            <h1 className="font-bold text-lg tracking-tight text-gray-200 uppercase">LUMINA-CAR 智能控车</h1>
           </div>
           <div className="flex items-center gap-3">
-            {traceId && (
-              <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-gray-800 text-xs text-gray-300 border border-gray-700">
-                <span className="font-mono">traceId: {traceId}</span>
-                {promptId && <span className="font-mono text-gray-500">/ {promptId}</span>}
-              </div>
-            )}
-            {lastUserMessage && lastUserMessage.trim() && (
-              <button
-                onClick={retryLast}
-                className="px-3 py-1.5 text-xs text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg transition-colors"
-              >
-                重试上条
-              </button>
-            )}
+            {traceId && <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-gray-800 text-xs text-gray-300 border border-gray-700"><span className="font-mono">ID: {traceId}</span></div>}
             <SettingsButton />
-            <button
-              onClick={clearMessages}
-              className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-lg transition-colors"
-            >
-              清空
-            </button>
+            <button onClick={clearMessages} className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-lg transition-colors">清空</button>
           </div>
         </div>
 
-        {/* 内容区域：对话和执行步骤合并显示 */}
         <div className="flex-1 overflow-y-auto scroll-smooth custom-scrollbar">
-          
-          {/* 任务规划清单 - 放在顶部 */}
           <TodoList todos={todos} />
-
-          {/* 推理链可视化 */}
-          <ReasoningChainVisualizer
-            steps={reasoningSteps}
-            tools={executions.map(e => ({
-              id: e.id,
-              toolName: e.toolName,
-              status: e.status === 'error' ? 'failed' : e.status === 'success' ? 'completed' : e.status,
-              timestamp: e.timestamp,
-              duration: e.duration,
-            }))}
-            safetyStatus={safetyStatus}
-            traceId={traceId || undefined}
-            promptId={promptId || undefined}
-          />
-
+          <ReasoningChainVisualizer steps={reasoningSteps} tools={executions.map(e => ({ id: e.id, toolName: e.toolName, status: e.status === 'error' ? 'failed' : e.status === 'success' ? 'completed' : e.status, timestamp: e.timestamp, duration: e.duration }))} safetyStatus={safetyStatus} traceId={traceId || undefined} promptId={promptId || undefined} />
           <div className="p-6 space-y-6">
-            {/* 对话消息 */}
             {messages.length > 0 && (
-              <div>
-                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">
-                  对话
-                </div>
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">指令历史</div>
                 <MessageList messages={messages} />
                 <div ref={bottomRef} />
-              </div>
+              </motion.div>
             )}
-
-            {/* 执行步骤 */}
             {steps.length > 0 && (
-              <div>
-                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">
-                  执行步骤 ({steps.length})
-                </div>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">执行链路 ({steps.length})</div>
                 <div ref={stepsContainerRef}>
-                  {steps.map((step, index) => (
-                    <StepItem
-                      key={step.id}
-                      step={step}
-                      isLast={index === steps.length - 1}
-                    />
-                  ))}
+                  {steps.map((step, index) => (<StepItem key={step.id} step={step} isLast={index === steps.length - 1} />))}
                 </div>
-              </div>
+              </motion.div>
             )}
-
-            {/* 空状态 */}
-            {messages.length === 0 && steps.length === 0 && (
-              <div className="h-full flex flex-col items-center justify-center text-gray-600 space-y-4 opacity-50">
-                <div className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-700 flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                  </svg>
-                </div>
-                <p className="font-mono text-sm">开始对话...</p>
-              </div>
-            )}
-
-            {/* 加载指示 */}
-            {isLoading && (
-              <div className="pl-8 py-4 opacity-50 flex gap-2 items-center text-xs font-mono text-gray-400">
-                <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:0.4s]"></div>
-              </div>
-            )}
+            {messages.length === 0 && steps.length === 0 && (<div className="h-full flex flex-col items-center justify-center text-gray-600 space-y-4 opacity-50"><div className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-700 flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.1 12.3"></path><path d="M12 12l9.9 0.3"></path></svg></div><p className="font-mono text-sm uppercase">Waiting for vehicle command...</p></div>)}
           </div>
         </div>
 
-        {/* 输入区域 */}
         <div className="p-4 bg-[#0d1117] border-t border-gray-800">
-          <InputArea
-            value={input}
-            onChange={setInput}
-            onSend={handleSend}
-            onKeyPress={handleKeyPress}
-            isLoading={isInputDisabled}
-          />
-          <div className="mt-2 text-[10px] text-gray-600 text-center font-mono">
-            Gemini 2.0 Flash • ReAct Loop Active
-          </div>
+          <InputArea value={input} onChange={setInput} onSend={handleSend} onKeyPress={handleKeyPress} isLoading={isInputDisabled} />
+          <div className="mt-2 text-[10px] text-gray-600 text-center font-mono">LUMINA-CAR CONTROL • VOICE AI ACTIVE</div>
         </div>
       </div>
-
-      {/* 右侧面板：AI智能交互眼镜虚拟界面 */}
       <div className="w-1/2">
         <DevicePanel deviceState={deviceState} />
       </div>
-
-      {/* 工具确认对话框 */}
-      {confirmationDialog && (
-        <ConfirmationDialog
-          visible={confirmationDialog.visible}
-          toolCall={confirmationDialog.toolCall}
-          correlationId={confirmationDialog.correlationId}
-          onConfirm={handleConfirmTool}
-          onCancel={handleCancelTool}
-        />
-      )}
+      {confirmationDialog && (<ConfirmationDialog visible={confirmationDialog.visible} toolCall={confirmationDialog.toolCall} correlationId={correlationId} onConfirm={handleConfirmTool} onCancel={handleCancelTool} />)}
     </div>
   );
 }

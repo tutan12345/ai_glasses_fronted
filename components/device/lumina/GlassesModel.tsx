@@ -285,11 +285,11 @@ export const GlassesModel: React.FC<GlassesProps> = ({ deviceState, scale = 1 })
         </group>
 
         {/* Micro LED Display Indicator (Bottom Inner) */}
-        <Cylinder args={[0.025, 0.025, 0.02, 8]} position={[0.4, -0.25, 0.08]} userData={{ isLight: activeComponents.screen }}>
+        <Cylinder args={[0.025, 0.025, 0.02, 8]} position={[0.4, -0.25, 0.08]} userData={{ isLight: activeComponents.lock }}>
           <meshStandardMaterial
             color="#000"
-            emissive={activeComponents.screen ? "#00ff88" : "#000"}
-            emissiveIntensity={activeComponents.screen ? 1.8 : 0}
+            emissive={activeComponents.lock ? "#00ff88" : "#000"}
+            emissiveIntensity={activeComponents.lock ? 1.8 : 0}
           />
         </Cylinder>
 
@@ -299,28 +299,28 @@ export const GlassesModel: React.FC<GlassesProps> = ({ deviceState, scale = 1 })
         </RoundedBox>
 
         {/* Battery Status LED */}
-        <Cylinder args={[0.02, 0.02, 0.015, 6]} position={[0.65, 0.45, -0.02]} userData={{ isLight: activeComponents.battery }}>
+        <Cylinder args={[0.02, 0.02, 0.015, 6]} position={[0.65, 0.45, -0.02]} userData={{ isLight: activeComponents.energy }}>
           <meshStandardMaterial
             color="#000"
-            emissive={activeComponents.battery ? (deviceState.battery.level > 20 ? "#00ff00" : "#ff0000") : "#000"}
-            emissiveIntensity={activeComponents.battery ? 1.5 : 0}
+            emissive={activeComponents.energy ? (deviceState.energy.level > 20 ? "#00ff00" : "#ff0000") : "#000"}
+            emissiveIntensity={activeComponents.energy ? 1.5 : 0}
           />
         </Cylinder>
 
         {/* Right Temple Status Indicator */}
-        <Cylinder args={[0.015, 0.015, 0.02, 6]} position={[0.75, 0.35, -0.02]} userData={{ isLight: activeComponents.flashlight }}>
+        <Cylinder args={[0.015, 0.015, 0.02, 6]} position={[0.75, 0.35, -0.02]} userData={{ isLight: activeComponents.ac }}>
           <meshStandardMaterial
             color="#000"
-            emissive={activeComponents.flashlight ? "#ffd700" : "#000"}
-            emissiveIntensity={activeComponents.flashlight ? 1 : 0}
+            emissive={activeComponents.ac ? "#ffd700" : "#000"}
+            emissiveIntensity={activeComponents.ac ? 1 : 0}
           />
         </Cylinder>
         {/* Decorative ring around status indicator */}
         <Torus args={[0.02, 0.005, 8, 16]} position={[0.75, 0.35, -0.01]} rotation={[Math.PI/2, 0, 0]}>
           <meshStandardMaterial
             color={getFrameColor()}
-            emissive={activeComponents.flashlight ? "#ffd700" : getFrameColor()}
-            emissiveIntensity={activeComponents.flashlight ? 0.5 : 0.2}
+            emissive={activeComponents.ac ? "#ffd700" : getFrameColor()}
+            emissiveIntensity={activeComponents.ac ? 0.5 : 0.2}
             transparent
             opacity={0.8}
           />
@@ -518,20 +518,20 @@ export const GlassesModel: React.FC<GlassesProps> = ({ deviceState, scale = 1 })
              </Cylinder>
 
              {/* Battery Level Indicator */}
-             <Cylinder args={[0.022, 0.022, 0.012, 8]} position={[0.1, -0.15, -0.5]} userData={{ isLight: activeComponents.battery }}>
+             <Cylinder args={[0.022, 0.022, 0.012, 8]} position={[0.1, -0.15, -0.5]} userData={{ isLight: activeComponents.energy }}>
                 <meshStandardMaterial
                   color="#000"
-                  emissive={activeComponents.battery ? (deviceState.battery.level > 20 ? "#00ff00" : "#ff0000") : "#000"}
-                  emissiveIntensity={activeComponents.battery ? 1.0 : 0}
+                  emissive={activeComponents.energy ? (deviceState.energy.level > 20 ? "#00ff00" : "#ff0000") : "#000"}
+                  emissiveIntensity={activeComponents.energy ? 1.0 : 0}
                 />
              </Cylinder>
 
              {/* Flashlight Indicator */}
-             <Cylinder args={[0.025, 0.025, 0.015, 8]} position={[0.1, -0.28, -0.8]} userData={{ isLight: activeComponents.flashlight }}>
+             <Cylinder args={[0.025, 0.025, 0.015, 8]} position={[0.1, -0.28, -0.8]} userData={{ isLight: activeComponents.ac }}>
                 <meshStandardMaterial
                   color="#000"
-                  emissive={activeComponents.flashlight ? "#ffffff" : "#000"}
-                  emissiveIntensity={activeComponents.flashlight ? 1.5 : 0}
+                  emissive={activeComponents.ac ? "#ffffff" : "#000"}
+                  emissiveIntensity={activeComponents.ac ? 1.5 : 0}
                 />
              </Cylinder>
          </group>
